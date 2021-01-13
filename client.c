@@ -1,4 +1,5 @@
 #include <netdb.h>
+#include <arpa/inet.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,6 +9,9 @@
 #define MAX 80
 #define PORT 8080
 #define SA struct sockaddr
+
+char *version = "0.1";
+
 void func(int sockfd)
 {
     char buff[MAX];
@@ -29,10 +33,43 @@ void func(int sockfd)
     }
 }
 
-int main()
+int main(int argc, char **argv, char* env[])
 {
     int sockfd, connfd;
     struct sockaddr_in servaddr, cli;
+    in_addr_t addr = INADDR_ANY;
+    int serv_port = 8080;
+
+    if (getenv("L2ADDR"))
+        addr = inet_addr(getenv("L2ADDR"));
+
+    if (getenv("L2PORT"))
+        serv_port = strtol(getenv("L2PORT"), NULL, 10);
+
+    //getopt, old friend
+    int c;
+    int digit_optind = 0;
+    while ((c = getopt(argc, argv, "w:dl:a:p:vh")) != -1) {
+        int this_option_optind = optind ? optind : 1;
+        switch (c) {
+            case 'a':
+                addr = inet_addr(optarg);
+                break;
+            case 'p':
+                port = strtol(optarg, NULL, 10);
+                break;
+            case 'v':
+                printf(version);
+                break;
+            case 'h':
+                printf("This is help message placeholder");
+                break;
+            case '?':
+                break;
+            default:
+                continue;
+        }
+    }
 
     // socket create and varification
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
