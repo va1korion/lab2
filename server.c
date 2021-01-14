@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <pthread.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <time.h>
@@ -11,63 +12,58 @@
 #include <sys/file.h>
 #include <limits.h>
 #include <sys/stat.h>
-#define LOCK_FILE "daemond.lock"
+#include <signal.h>
+
 #define MAX 80
 #define SA struct sockaddr
 
 struct stack{
     long double number;
     struct stack* next;
+
 };
 
-struct dict{                //this should be a hash table
-    char* ip;
+struct dict{                //this should be a hash table map
+    struct in_addr ip;
     struct stack* stack;
+    pthread_mutex_t personal_mutex;
 };
 
+struct thread_arg{
+    int sockfd;
+    int *dict_len;
+    struct in_addr addr;
+};
+
+pthread_mutex_t stacks_mutex;
+static struct dict *stacks;
+static FILE* logfile;
 char *version = "0.1";
-static int wait_time = 0;
+static unsigned int wait_time = 0, communism = 0;
 // Function designed for chat between client and server.
-void func(int sockfd)
-{
-    char buff[MAX];
-    int n;
-    // infinite loop for chat
-    for (;;) {
-        bzero(buff, MAX);
+void* func(void*);
 
-        // read the message from client and copy it in buffer
-        read(sockfd, buff, sizeof(buff));
-        // print buffer which contains the client contents
-        printf("From client: %s\t To client : ", buff);
-        bzero(buff, MAX);
-        n = 0;
-        // copy server message in the buffer
-        while ((buff[n++] = getchar()) != '\n');
-
-        // and send that buffer to client
-        write(sockfd, buff, sizeof(buff));
-
-        // if msg contains "Exit" then server exit and chat ended.
-        if (strncmp("exit", buff, 4) == 0) {
-            printf("Server Exit...\n");
-            break;
-        }
-    }
+void sig_func(int x){
+    printf("Log info placeholder \n");
+    fprintf(logfile, "Log info placeholder \n");
 }
-
-
 // Driver function
 int main(int argc, char **argv, char* env[])
 {
-    int sockfd, connfd, communism = 0;
+    int sockfd, connfd, error = 0;
+    long current_time;
     in_addr_t addr = INADDR_ANY;
     int serv_port = 8080;
     unsigned int len;
-    struct sockaddr_in servaddr, cli;
+    struct sockaddr_in servaddr;
     char buffer[MAX];
     char logname[PATH_MAX];
-
+    strcpy(logname, "/tmp/lab2.log");
+    struct sigaction sig = {sig_func, 0, SA_RESTART};
+    error = sigaction(SIGUSR1, &sig, 0);
+    if (error){
+        printf("sigaction failed, SIGUSR1 will not be handled \n ");
+    }
     //checking the env
     if (getenv("L2WAIT"))
         wait_time = strtol(getenv("L2WAIT"), NULL, 10);
@@ -114,23 +110,26 @@ int main(int argc, char **argv, char* env[])
             case '?':
                 break;
             default:
-                continue;
+                break;
         }
     }
 
-    FILE* log = fopen(logname, "w");
-
+    logfile = fopen(logname, "w");
+    const long start_time = time(NULL);
+    fprintf(logfile,"%s: Getopt parsed, starting up the server \n", ctime(&start_time));
+    fflush(logfile);
     // socket create and verification
 
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd == -1) {
-        fprintf(log, "socket creation failed...\n");
+        fprintf(logfile, "socket creation failed...\n");
+        printf("socket bind failed...\n");
         exit(0);
     }
     else
-        fprintf(log, "Socket successfully created..\n");
+        fprintf(logfile, "Socket successfully created..\n");
     bzero(&servaddr, sizeof(servaddr));
-
+    fflush(logfile);
     // assign IP, PORT
     servaddr.sin_family = AF_INET;
     servaddr.sin_addr.s_addr = htonl(addr);
@@ -138,33 +137,148 @@ int main(int argc, char **argv, char* env[])
 
     // Binding newly created socket to given IP and verification
     if ((bind(sockfd, (SA*)&servaddr, sizeof(servaddr))) != 0) {
-        fprintf(log, "socket bind failed...\n");
-        exit(0);
+        fprintf(logfile, "socket bind failed...\n");
     }
     else
-        fprintf(log, "Socket successfully binded..\n");
-
+        fprintf(logfile, "Socket successfully binded..\n");
+    fflush(logfile);
     // Now server is ready to listen and verification
-    if ((listen(sockfd, 5)) != 0) {
-        fprintf(log, "Listen failed...\n");
-        exit(0);
+
+
+    int i = 0;
+    error = 0;
+    len = sizeof(struct sockaddr_in);
+    stacks = malloc(sizeof(struct dict));
+    struct thread_arg *argad = malloc(sizeof(struct thread_arg)), arg = *argad;
+
+    arg.dict_len = malloc(sizeof(int));
+    *arg.dict_len = 1;
+    stacks[0].ip.s_addr = inet_addr("127.0.0.1");
+    stacks[0].stack = malloc(sizeof(struct stack));
+    stacks[0].stack->next = NULL;
+    stacks[0].stack->next = 0;
+    pthread_mutex_init(&stacks_mutex, NULL);
+    for (; ;) {
+        if ((listen(sockfd, 5)) != 0) {
+            fprintf(logfile, "Listen failed...\n");
+        }
+        else
+            fprintf(logfile, "Server listening..\n");
+        i++;
+        struct sockaddr_in *cli = malloc(sizeof(struct sockaddr_in));
+        fflush(logfile);
+        // Accept the data packet from client and verification
+
+
+        connfd = accept(sockfd, (SA*)cli, &len);
+        if (connfd < 0) {
+            current_time = time(NULL);
+            fprintf(logfile, "%s server acccept failed...\n", ctime(&current_time));
+        }
+        else{
+            current_time = time(NULL);
+            fprintf(logfile, "%s server acccept the client: %s \n", ctime(&current_time), inet_ntoa(cli->sin_addr));
+        }
+
+        arg.sockfd = connfd;
+        arg.addr = cli->sin_addr;
+
+        // chatting between client and server
+        pthread_t thread;
+        error = pthread_create(&thread, NULL, &func, &arg);
+        current_time = time(NULL);
+        if (error) fprintf(logfile, "%s pthread create failed\n", ctime(&current_time));
+        if (error) break;
+
+        error = pthread_detach(thread);
+        if (error) fprintf(logfile, "%s pthread detach failed, might cause mem leak\n", ctime(&current_time));
+        fprintf(logfile, "%s thread successfully created and detached \n", ctime(&current_time));
+        fflush(logfile);
     }
-    else
-        fprintf(log, "Server listening..\n");
-    len = sizeof(cli);
 
-    // Accept the data packet from client and verification
-    connfd = accept(sockfd, (SA*)&cli, &len);
-    if (connfd < 0) {
-        fprintf(log, "server acccept failed...\n");
-        exit(0);
+    printf("Critical failure, finishing... \n\n");
+}
+
+void* func(void* arg_ptr)
+{
+    int sockfd, err, uid = 0;
+    char *err_ptr = NULL;
+    struct thread_arg arg = *(struct thread_arg*)arg_ptr;
+    sockfd = arg.sockfd;
+    struct stack *stack = NULL;
+    char buff[MAX];
+    long double n;
+    bzero(buff, MAX);
+    if (communism) stack = stacks->stack;
+    read(sockfd, buff, sizeof(buff));
+    // client auth
+    long current_time = time(NULL);
+    fprintf(logfile, "%s Looking for client : %s \n", ctime(&current_time), inet_ntoa(arg.addr));
+    for (int i = 0; i < *arg.dict_len; i++){
+        if (communism) break;
+        if (stacks[i].ip.s_addr == arg.addr.s_addr){
+            stack = stacks[i].stack;
+            uid = i;
+            break;
+        }
+    };
+
+    pthread_mutex_lock(&stacks_mutex);
+    if (stack == NULL){
+        fprintf(logfile, "%s client %s not found, creating new entry \n", ctime(&current_time), inet_ntoa(arg.addr));
+        stacks = realloc(stacks, (++*arg.dict_len)*sizeof(struct dict));
+        uid = *arg.dict_len-1;
+        stacks[uid].ip.s_addr = arg.addr.s_addr;
+        stacks[uid].stack = malloc(sizeof(stack));
+        stack = stacks[uid].stack;
+        pthread_mutex_init(&stacks[uid].personal_mutex, NULL);
     }
-    else
-        printf("server acccept the client...\n");
+    pthread_mutex_unlock(&stacks_mutex);
+    // read the message from client and copy it in buffer
 
-    // Function for chatting between client and server
-    func(connfd);
 
-    // After chatting close the socket
+    pthread_mutex_lock(&stacks[uid].personal_mutex);
+
+    fprintf(logfile, "%s From client: %s \n", ctime(&current_time),buff);
+    if (strncmp(buff, "PUSH", 4) == 0){
+        n = strtod(buff+5, &err_ptr);
+        if (n == 0 && err_ptr == buff+5){
+            bzero(buff, MAX);
+            strcpy(buff, "Error 400: This is not a number");
+        }else{
+        struct stack *stack_tmp = malloc(sizeof(struct stack));
+        stack_tmp->next = stack;
+        stack = stack_tmp;
+        stack->number = n;
+        bzero(buff, MAX);
+        strcpy(buff, "200 OK");
+        }
+    }
+
+    if (strncmp(buff, "POP", 3) == 0){
+        if (stack->next == NULL){
+            bzero(buff, MAX);
+            strcpy(buff, "Error: Empty stack");
+        }else{
+            struct stack *stack_tmp = stack;
+            n = stack->number;
+            stack = stack->next;
+            free(stack_tmp);
+            bzero(buff, MAX);
+            sprintf(buff, "%Le", n);
+        }
+    }
+
+    pthread_mutex_unlock(&stacks[uid].personal_mutex);
+    stacks[uid].stack = stack;
+
+    sleep(wait_time);
+    // print buffer which contains the client contents
+    fprintf(logfile, "%s To client : %s \n", ctime(&current_time), buff);
+
+    // and send that buffer to client
+    write(sockfd, buff, sizeof(buff));
+
     close(sockfd);
+    return NULL;
 }

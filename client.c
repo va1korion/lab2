@@ -7,7 +7,6 @@
 #include <sys/socket.h>
 
 #define MAX 80
-#define PORT 8080
 #define SA struct sockaddr
 
 char *version = "0.1";
@@ -20,8 +19,7 @@ void func(int sockfd)
         bzero(buff, sizeof(buff));
         printf("Enter the string : ");
         n = 0;
-        while ((buff[n++] = getchar()) != '\n')
-            ;
+        while ((buff[n++] = getchar()) != '\n');
         write(sockfd, buff, sizeof(buff));
         bzero(buff, sizeof(buff));
         read(sockfd, buff, sizeof(buff));
@@ -36,8 +34,8 @@ void func(int sockfd)
 int main(int argc, char **argv, char* env[])
 {
     int sockfd, connfd;
-    struct sockaddr_in servaddr, cli;
-    in_addr_t addr = INADDR_ANY;
+    struct sockaddr_in servaddr;
+    in_addr_t addr = inet_addr("127.0.0.1");
     int serv_port = 8080;
 
     if (getenv("L2ADDR"))
@@ -56,10 +54,10 @@ int main(int argc, char **argv, char* env[])
                 addr = inet_addr(optarg);
                 break;
             case 'p':
-                port = strtol(optarg, NULL, 10);
+                serv_port = strtol(optarg, NULL, 10);
                 break;
             case 'v':
-                printf(version);
+                printf("%s \n", version);
                 break;
             case 'h':
                 printf("This is help message placeholder");
@@ -68,6 +66,19 @@ int main(int argc, char **argv, char* env[])
                 break;
             default:
                 continue;
+        }
+    }
+
+    char buff[MAX];
+    for(int i = 0; i < argc; i++){
+        if (strncmp(argv[i], "PUSH", 4) == 0){
+            strcpy(buff, "PUSH ");
+            strcpy(buff+5, argv[i+1]);
+            break;
+        }
+        if (strncmp(argv[i], "POP", 4) == 0){
+            strcpy(buff, "POP");
+            break;
         }
     }
 
@@ -83,8 +94,8 @@ int main(int argc, char **argv, char* env[])
 
     // assign IP, PORT
     servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    servaddr.sin_port = htons(PORT);
+    servaddr.sin_addr.s_addr = addr;
+    servaddr.sin_port = htons(serv_port);
 
     // connect the client socket to server socket
     if (connect(sockfd, (SA*)&servaddr, sizeof(servaddr)) != 0) {
@@ -93,9 +104,13 @@ int main(int argc, char **argv, char* env[])
     }
     else
         printf("connected to the server..\n");
+    printf("To Server: %s \n", buff);
+    write(sockfd, buff, sizeof(buff));
+    bzero(buff, sizeof(buff));
 
-    // function for chat
-    func(sockfd);
+    read(sockfd, buff, sizeof(buff));
+    printf("From Server: %s \n", buff);
+
 
     // close the socket
     close(sockfd);
