@@ -38,14 +38,19 @@ struct thread_arg{
 pthread_mutex_t stacks_mutex;
 static struct dict *stacks;
 static FILE* logfile;
+static long start_time;
 char *version = "0.1";
-static unsigned int wait_time = 0, communism = 0;
+static unsigned int wait_time = 0, communism = 0, success = 0, fail = 0;
 // Function designed for chat between client and server.
 void* func(void*);
 
 void sig_func(int x){
-    printf("Log info placeholder \n");
-    fprintf(logfile, "Log info placeholder \n");
+    printf("info: \n");
+    int runtime = (int)difftime(start_time, time(NULL));
+    printf("time running: %i (approx %i minutes) \n", runtime, runtime/60);
+    printf("requests served: %i \n", success);
+    printf("errors on requests: %i \n", fail);
+    fprintf(logfile, "info: \n");
 }
 // Driver function
 int main(int argc, char **argv, char* env[])
@@ -115,9 +120,8 @@ int main(int argc, char **argv, char* env[])
     }
 
     logfile = fopen(logname, "w");
-    const long start_time = time(NULL);
-    fprintf(logfile,"%s: Getopt parsed, starting up the server \n", ctime(&start_time));
-    fflush(logfile);
+
+
     // socket create and verification
 
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -138,6 +142,8 @@ int main(int argc, char **argv, char* env[])
     // Binding newly created socket to given IP and verification
     if ((bind(sockfd, (SA*)&servaddr, sizeof(servaddr))) != 0) {
         fprintf(logfile, "socket bind failed...\n");
+        printf("Critical error, exiting... \n");
+        exit(2);
     }
     else
         fprintf(logfile, "Socket successfully binded..\n");
@@ -157,13 +163,13 @@ int main(int argc, char **argv, char* env[])
     stacks[0].stack = malloc(sizeof(struct stack));
     stacks[0].stack->next = NULL;
     stacks[0].stack->next = 0;
+    start_time = time(NULL);
+    fprintf(logfile,"%s: Getopt parsed, starting up the server \n", ctime(&start_time));
     pthread_mutex_init(&stacks_mutex, NULL);
     for (; ;) {
         if ((listen(sockfd, 5)) != 0) {
             fprintf(logfile, "Listen failed...\n");
         }
-        else
-            fprintf(logfile, "Server listening..\n");
         i++;
         struct sockaddr_in *cli = malloc(sizeof(struct sockaddr_in));
         fflush(logfile);
@@ -174,10 +180,6 @@ int main(int argc, char **argv, char* env[])
         if (connfd < 0) {
             current_time = time(NULL);
             fprintf(logfile, "%s server acccept failed...\n", ctime(&current_time));
-        }
-        else{
-            current_time = time(NULL);
-            fprintf(logfile, "%s server acccept the client: %s \n", ctime(&current_time), inet_ntoa(cli->sin_addr));
         }
 
         arg.sockfd = connfd;
@@ -197,6 +199,7 @@ int main(int argc, char **argv, char* env[])
     }
 
     printf("Critical failure, finishing... \n\n");
+    exit(1);
 }
 
 void* func(void* arg_ptr)
@@ -231,6 +234,7 @@ void* func(void* arg_ptr)
         stacks[uid].ip.s_addr = arg.addr.s_addr;
         stacks[uid].stack = malloc(sizeof(stack));
         stack = stacks[uid].stack;
+        stack->next = NULL;
         pthread_mutex_init(&stacks[uid].personal_mutex, NULL);
     }
     pthread_mutex_unlock(&stacks_mutex);
@@ -238,13 +242,13 @@ void* func(void* arg_ptr)
 
 
     pthread_mutex_lock(&stacks[uid].personal_mutex);
-
     fprintf(logfile, "%s From client: %s \n", ctime(&current_time),buff);
     if (strncmp(buff, "PUSH", 4) == 0){
         n = strtod(buff+5, &err_ptr);
         if (n == 0 && err_ptr == buff+5){
             bzero(buff, MAX);
             strcpy(buff, "Error 400: This is not a number");
+            fail++;
         }else{
         struct stack *stack_tmp = malloc(sizeof(struct stack));
         stack_tmp->next = stack;
@@ -252,6 +256,7 @@ void* func(void* arg_ptr)
         stack->number = n;
         bzero(buff, MAX);
         strcpy(buff, "200 OK");
+        success++;
         }
     }
 
@@ -259,6 +264,7 @@ void* func(void* arg_ptr)
         if (stack->next == NULL){
             bzero(buff, MAX);
             strcpy(buff, "Error: Empty stack");
+            fail++;
         }else{
             struct stack *stack_tmp = stack;
             n = stack->number;
@@ -266,6 +272,7 @@ void* func(void* arg_ptr)
             free(stack_tmp);
             bzero(buff, MAX);
             sprintf(buff, "%Le", n);
+            success++;
         }
     }
 
