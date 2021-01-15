@@ -118,7 +118,7 @@ int main(int argc, char **argv, char* env[])
                        "-l helps specify logfile name. The default is /tmp/lab2.log \n"
                        "-w specifies waiting time during connection \n"
                        "-d starts server in daemon mode \n"
-                       "-a specifies listening address.\n"
+                       "-a specifies listening address (work in progress).\n"
                        "-p specifies listening port. The default is 8080 \n"
                        "-v outputs program version \n"
                        "-c starts server with one stack \n"
@@ -154,6 +154,7 @@ int main(int argc, char **argv, char* env[])
     // Binding newly created socket to given IP and verification
     if ((bind(sockfd, (SA*)&servaddr, sizeof(servaddr))) != 0) {
         fprintf(logfile, "socket bind failed...\n");
+        printf("socket bind failed...\n");
         printf("Critical error, exiting... \n");
         exit(2);
     }
