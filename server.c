@@ -39,18 +39,21 @@ pthread_mutex_t stacks_mutex;
 static struct dict *stacks;
 static FILE* logfile;
 static long start_time;
-char *version = "0.1";
+char *version = "0.2";
 static unsigned int wait_time = 0, communism = 0, success = 0, fail = 0;
 // Function designed for chat between client and server.
 void* func(void*);
 
 void sig_func(int x){
     printf("info: \n");
-    int runtime = (int)difftime(start_time, time(NULL));
-    printf("time running: %i (approx %i minutes) \n", runtime, runtime/60);
+    int runtime = (int)difftime(time(NULL), start_time);
+    printf("time running: %i seconds (approx %i minutes) \n", runtime, runtime/60);
     printf("requests served: %i \n", success);
     printf("errors on requests: %i \n", fail);
-    fprintf(logfile, "info: \n");
+    fprintf(logfile, "time running: %i (approx %i minutes) \n", runtime, runtime/60);
+    fprintf(logfile, "requests served: %i \n", success);
+    fprintf(logfile, "errors on requests: %i \n", fail);
+    fflush(logfile);
 }
 // Driver function
 int main(int argc, char **argv, char* env[])
@@ -110,7 +113,16 @@ int main(int argc, char **argv, char* env[])
                 communism = 1;
                 break;
             case 'h':
-                printf("This is help message placeholder\n");
+                printf("\n \t This is help message:\n"
+                       "This is simple TCP server, it has several startup optiions \n"
+                       "-l helps specify logfile name. The default is /tmp/lab2.log \n"
+                       "-w specifies waiting time during connection \n"
+                       "-d starts server in daemon mode \n"
+                       "-a specifies listening address.\n"
+                       "-p specifies listening port. The default is 8080 \n"
+                       "-v outputs program version \n"
+                       "-c starts server with one stack \n"
+                       "-h prints this message \n");
                 break;
             case '?':
                 break;
@@ -164,7 +176,7 @@ int main(int argc, char **argv, char* env[])
     stacks[0].stack->next = NULL;
     stacks[0].stack->next = 0;
     start_time = time(NULL);
-    fprintf(logfile,"%s: Getopt parsed, starting up the server \n", ctime(&start_time));
+    fprintf(logfile,"%s\t Getopt parsed, starting up the server \n", ctime(&start_time));
     pthread_mutex_init(&stacks_mutex, NULL);
     for (; ;) {
         if ((listen(sockfd, 5)) != 0) {
@@ -179,7 +191,7 @@ int main(int argc, char **argv, char* env[])
         connfd = accept(sockfd, (SA*)cli, &len);
         if (connfd < 0) {
             current_time = time(NULL);
-            fprintf(logfile, "%s server acccept failed...\n", ctime(&current_time));
+            fprintf(logfile, "%s\t server acccept failed...\n", ctime(&current_time));
         }
 
         arg.sockfd = connfd;
@@ -189,12 +201,12 @@ int main(int argc, char **argv, char* env[])
         pthread_t thread;
         error = pthread_create(&thread, NULL, &func, &arg);
         current_time = time(NULL);
-        if (error) fprintf(logfile, "%s pthread create failed\n", ctime(&current_time));
+        if (error) fprintf(logfile, "%s\t pthread create failed\n", ctime(&current_time));
         if (error) break;
 
         error = pthread_detach(thread);
-        if (error) fprintf(logfile, "%s pthread detach failed, might cause mem leak\n", ctime(&current_time));
-        fprintf(logfile, "%s thread successfully created and detached \n", ctime(&current_time));
+        if (error) fprintf(logfile, "%s \t pthread detach failed, might cause mem leak\n", ctime(&current_time));
+        else fprintf(logfile, "%s \t thread successfully created and detached \n", ctime(&current_time));
         fflush(logfile);
     }
 
@@ -216,7 +228,7 @@ void* func(void* arg_ptr)
     read(sockfd, buff, sizeof(buff));
     // client auth
     long current_time = time(NULL);
-    fprintf(logfile, "%s Looking for client : %s \n", ctime(&current_time), inet_ntoa(arg.addr));
+    fprintf(logfile, "%s \t Looking for client : %s \n", ctime(&current_time), inet_ntoa(arg.addr));
     for (int i = 0; i < *arg.dict_len; i++){
         if (communism) break;
         if (stacks[i].ip.s_addr == arg.addr.s_addr){
@@ -228,7 +240,7 @@ void* func(void* arg_ptr)
 
     pthread_mutex_lock(&stacks_mutex);
     if (stack == NULL){
-        fprintf(logfile, "%s client %s not found, creating new entry \n", ctime(&current_time), inet_ntoa(arg.addr));
+        fprintf(logfile, "%s \t  client %s not found, creating new entry \n", ctime(&current_time), inet_ntoa(arg.addr));
         stacks = realloc(stacks, (++*arg.dict_len)*sizeof(struct dict));
         uid = *arg.dict_len-1;
         stacks[uid].ip.s_addr = arg.addr.s_addr;
@@ -242,7 +254,7 @@ void* func(void* arg_ptr)
 
 
     pthread_mutex_lock(&stacks[uid].personal_mutex);
-    fprintf(logfile, "%s From client: %s \n", ctime(&current_time),buff);
+    fprintf(logfile, "%s \t From client: %s \n", ctime(&current_time),buff);
     if (strncmp(buff, "PUSH", 4) == 0){
         n = strtod(buff+5, &err_ptr);
         if (n == 0 && err_ptr == buff+5){
@@ -281,11 +293,12 @@ void* func(void* arg_ptr)
 
     sleep(wait_time);
     // print buffer which contains the client contents
-    fprintf(logfile, "%s To client : %s \n", ctime(&current_time), buff);
+    fprintf(logfile, "%s \t To client : %s \n", ctime(&current_time), buff);
 
     // and send that buffer to client
     write(sockfd, buff, sizeof(buff));
 
     close(sockfd);
+    fflush(logfile);
     return NULL;
 }
