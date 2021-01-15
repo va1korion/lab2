@@ -216,7 +216,7 @@ int main(int argc, char **argv, char* env[])
 
 void* func(void* arg_ptr)
 {
-    int sockfd, err, uid = 0;
+    int sockfd, err, uid = 0, req = 0;
     char *err_ptr = NULL;
     struct thread_arg arg = *(struct thread_arg*)arg_ptr;
     sockfd = arg.sockfd;
@@ -261,14 +261,16 @@ void* func(void* arg_ptr)
             bzero(buff, MAX);
             strcpy(buff, "Error 400: This is not a number");
             fail++;
+            req = 1;
         }else{
-        struct stack *stack_tmp = malloc(sizeof(struct stack));
-        stack_tmp->next = stack;
-        stack = stack_tmp;
-        stack->number = n;
-        bzero(buff, MAX);
-        strcpy(buff, "200 OK");
-        success++;
+            struct stack *stack_tmp = malloc(sizeof(struct stack));
+            stack_tmp->next = stack;
+            stack = stack_tmp;
+            stack->number = n;
+            bzero(buff, MAX);
+            strcpy(buff, "200 OK");
+            success++;
+            req = 1;
         }
     }
 
@@ -277,6 +279,7 @@ void* func(void* arg_ptr)
             bzero(buff, MAX);
             strcpy(buff, "Error: Empty stack");
             fail++;
+            req = 1;
         }else{
             struct stack *stack_tmp = stack;
             n = stack->number;
@@ -285,13 +288,22 @@ void* func(void* arg_ptr)
             bzero(buff, MAX);
             sprintf(buff, "%Le", n);
             success++;
+            req = 1;
         }
     }
 
     pthread_mutex_unlock(&stacks[uid].personal_mutex);
     stacks[uid].stack = stack;
 
+    if (req == 0){
+        bzero(buff, MAX);
+        strcpy(buff, "Error: wrong request");
+    }
+
+
     sleep(wait_time);
+
+
     // print buffer which contains the client contents
     fprintf(logfile, "%s \t To client : %s \n", ctime(&current_time), buff);
 

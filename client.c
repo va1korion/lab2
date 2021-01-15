@@ -60,7 +60,15 @@ int main(int argc, char **argv, char* env[])
                 printf("%s \n", version);
                 break;
             case 'h':
-                printf("This is help message placeholder");
+                printf("\n \t This is help message:\n"
+                       "This is simple TCP client, it has several startup options \n"
+                       "PUSH [number] pushes the number to stack on server \n"
+                       "POP returns the number from the top of the stack \n"
+                       "user is required to provide one of those options \n \n"
+                       "-a specifies server address. The default is 127.0.0.1 \n"
+                       "-p specifies server port. The default is 8080 \n"
+                       "-v outputs program version \n"
+                       "-h prints this message \n");
                 break;
             case '?':
                 break;
@@ -80,6 +88,9 @@ int main(int argc, char **argv, char* env[])
             strcpy(buff, "POP");
             break;
         }
+    }
+    if (buff[0] != 'P'){
+        printf("Wrong request! Use -h to see available requests");
     }
 
     // socket create and varification
