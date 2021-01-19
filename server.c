@@ -13,7 +13,7 @@
 #include <limits.h>
 #include <sys/stat.h>
 #include <signal.h>
-
+#define LOCK_FILE "/tmp/daemon.lock"
 #define MAX 80
 #define SA struct sockaddr
 
@@ -39,22 +39,76 @@ pthread_mutex_t stacks_mutex;
 static struct dict *stacks;
 static FILE* logfile;
 static long start_time;
-char *version = "0.2";
-static unsigned int wait_time = 0, communism = 0, success = 0, fail = 0;
+char *version = "0.3";
+
+static unsigned int wait_time = 0, communism = 0, success = 0, fail = 0, sigusr_flag = 0;
 // Function designed for chat between client and server.
 void* func(void*);
 
-void sig_func(int x){
-    printf("info: \n");
-    int runtime = (int)difftime(time(NULL), start_time);
-    printf("time running: %i seconds (approx %i minutes) \n", runtime, runtime/60);
-    printf("requests served: %i \n", success);
-    printf("errors on requests: %i \n", fail);
-    fprintf(logfile, "time running: %i (approx %i minutes) \n", runtime, runtime/60);
-    fprintf(logfile, "requests served: %i \n", success);
-    fprintf(logfile, "errors on requests: %i \n", fail);
-    fflush(logfile);
+void sig_func(){       //work in progress
+    sigusr_flag = 1;
+    char buff[] = "Info will be printed after next request\n";
+    write(1, buff, sizeof(buff));
+    //write(logfile, buff, sizeof(buff));
 }
+void sig_exit(){       //work in progress
+    exit(0);
+}
+
+void daemonize(){
+    pid_t pid;
+
+    /* Fork off the parent process */
+    pid = fork();
+
+    /* An error occurred */
+    if (pid < 0)
+        exit(EXIT_FAILURE);
+
+    /* Success: Let the parent terminate */
+    if (pid > 0)
+        exit(EXIT_SUCCESS);
+
+    /* On success: The child process becomes session leader */
+    if (setsid() < 0)
+        exit(EXIT_FAILURE);
+
+    /* Fork off for the second time*/
+    pid = fork();
+
+    /* An error occurred */
+    if (pid < 0)
+        exit(EXIT_FAILURE);
+
+    /* Success: Let the parent terminate */
+    if (pid > 0)
+        exit(EXIT_SUCCESS);
+
+    // working with signals
+
+    struct sigaction sigint = {sig_exit, 0, SA_RESTART};
+    sigaction(SIGINT, &sigint, 0);
+    struct sigaction sigterm = {sig_exit, 0, SA_RESTART};
+    sigaction(SIGTERM, &sigterm, 0);
+    struct sigaction sigquit = {sig_exit, 0, SA_RESTART};
+    sigaction(SIGQUIT, &sigquit, 0);
+
+    signal(SIGCHLD,SIG_IGN);
+    signal(SIGTSTP,SIG_IGN);
+    /* Set new file permissions */
+    umask(0);
+    char cwd[PATH_MAX];
+    getcwd(cwd, PATH_MAX);
+    chdir(cwd);
+
+    /* Close all open file descriptors */
+    int x;
+    for (x = sysconf(_SC_OPEN_MAX); x>=0; x--)
+    {
+        close (x);
+    }
+}
+
 // Driver function
 int main(int argc, char **argv, char* env[])
 {
@@ -64,7 +118,6 @@ int main(int argc, char **argv, char* env[])
     int serv_port = 8080;
     unsigned int len;
     struct sockaddr_in servaddr;
-    char buffer[MAX];
     char logname[PATH_MAX];
     strcpy(logname, "/tmp/lab2.log");
     struct sigaction sig = {sig_func, 0, SA_RESTART};
@@ -98,7 +151,7 @@ int main(int argc, char **argv, char* env[])
                 wait_time = strtol(optarg, NULL, 10);
                 break;
             case 'd':
-                daemon(0, 0);
+                daemonize();
                 break;
             case 'a':
                 addr = inet_addr(optarg);
@@ -156,6 +209,7 @@ int main(int argc, char **argv, char* env[])
         fprintf(logfile, "socket bind failed...\n");
         printf("socket bind failed...\n");
         printf("Critical error, exiting... \n");
+        fflush(logfile);
         exit(2);
     }
     else
@@ -180,23 +234,38 @@ int main(int argc, char **argv, char* env[])
     fprintf(logfile,"%s\t Getopt parsed, starting up the server \n", ctime(&start_time));
     pthread_mutex_init(&stacks_mutex, NULL);
     for (; ;) {
+
+        if (sigusr_flag){
+            printf("info: \n");
+            int runtime = (int)difftime(time(NULL), start_time);
+            printf("time running: %i seconds (approx %i minutes) \n", runtime, runtime/60);
+            printf("requests served: %i \n", success);
+            printf("errors on requests: %i \n", fail);
+            fprintf(logfile, "time running: %i (approx %i minutes) \n", runtime, runtime/60);
+            fprintf(logfile, "requests served: %i \n", success);
+            fprintf(logfile, "errors on requests: %i \n", fail);
+            fflush(logfile);
+        }
+
+
         if ((listen(sockfd, 5)) != 0) {
             fprintf(logfile, "Listen failed...\n");
         }
         i++;
-        struct sockaddr_in *cli = malloc(sizeof(struct sockaddr_in));
+
+        struct sockaddr_in cli;
         fflush(logfile);
         // Accept the data packet from client and verification
 
-
-        connfd = accept(sockfd, (SA*)cli, &len);
+        connfd = accept(sockfd, (SA*)&cli, &len);
         if (connfd < 0) {
             current_time = time(NULL);
             fprintf(logfile, "%s\t server acccept failed...\n", ctime(&current_time));
         }
 
         arg.sockfd = connfd;
-        arg.addr = cli->sin_addr;
+        arg.addr = cli.sin_addr;
+
 
         // chatting between client and server
         pthread_t thread;
@@ -301,16 +370,13 @@ void* func(void* arg_ptr)
         strcpy(buff, "Error: wrong request");
     }
 
-
     sleep(wait_time);
-
 
     // print buffer which contains the client contents
     fprintf(logfile, "%s \t To client : %s \n", ctime(&current_time), buff);
 
     // and send that buffer to client
     write(sockfd, buff, sizeof(buff));
-
     close(sockfd);
     fflush(logfile);
     return NULL;

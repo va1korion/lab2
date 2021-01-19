@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <time.h>
 
 #define MAX 80
 #define SA struct sockaddr
@@ -37,6 +38,7 @@ int main(int argc, char **argv, char* env[])
     struct sockaddr_in servaddr;
     in_addr_t addr = inet_addr("127.0.0.1");
     int serv_port = 8080;
+    time_t start_time = time(NULL), current_time;
 
     if (getenv("L2ADDR"))
         addr = inet_addr(getenv("L2ADDR"));
@@ -81,6 +83,7 @@ int main(int argc, char **argv, char* env[])
     for(int i = 0; i < argc; i++){
         if (strncmp(argv[i], "PUSH", 4) == 0){
             strcpy(buff, "PUSH ");
+            if (i+1 > argc) printf("Wrong request! Use -h to see available requests");
             strcpy(buff+5, argv[i+1]);
             break;
         }
@@ -121,7 +124,8 @@ int main(int argc, char **argv, char* env[])
 
     read(sockfd, buff, sizeof(buff));
     printf("From Server: %s \n", buff);
-
+    double wait = difftime(time(NULL), start_time);
+    printf("Delay: %f \n", wait);
 
     // close the socket
     close(sockfd);
