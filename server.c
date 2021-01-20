@@ -13,7 +13,7 @@
 #include <limits.h>
 #include <sys/stat.h>
 #include <signal.h>
-#define LOCK_FILE "/tmp/daemon.lock"
+
 #define MAX 80
 #define SA struct sockaddr
 
@@ -39,7 +39,7 @@ pthread_mutex_t stacks_mutex;
 static struct dict *stacks;
 static FILE* logfile;
 static long start_time;
-char *version = "0.3";
+char *version = "0.4";
 
 static unsigned int wait_time = 0, communism = 0, success = 0, fail = 0, sigusr_flag = 0;
 // Function designed for chat between client and server.
@@ -93,8 +93,8 @@ void daemonize(){
     struct sigaction sigquit = {sig_exit, 0, SA_RESTART};
     sigaction(SIGQUIT, &sigquit, 0);
 
-    signal(SIGCHLD,SIG_IGN);
-    signal(SIGTSTP,SIG_IGN);
+    //signal(SIGCHLD,SIG_IGN);
+    //signal(SIGTSTP,SIG_IGN);
     /* Set new file permissions */
     umask(0);
     char cwd[PATH_MAX];
@@ -233,6 +233,9 @@ int main(int argc, char **argv, char* env[])
     start_time = time(NULL);
     fprintf(logfile,"%s\t Getopt parsed, starting up the server \n", ctime(&start_time));
     pthread_mutex_init(&stacks_mutex, NULL);
+    if ((listen(sockfd, 5)) != 0) {
+        fprintf(logfile, "Listen failed...\n");
+    }
     for (; ;) {
 
         if (sigusr_flag){
@@ -247,12 +250,6 @@ int main(int argc, char **argv, char* env[])
             fflush(logfile);
         }
 
-
-        if ((listen(sockfd, 5)) != 0) {
-            fprintf(logfile, "Listen failed...\n");
-        }
-        i++;
-
         struct sockaddr_in cli;
         fflush(logfile);
         // Accept the data packet from client and verification
@@ -265,7 +262,6 @@ int main(int argc, char **argv, char* env[])
 
         arg.sockfd = connfd;
         arg.addr = cli.sin_addr;
-
 
         // chatting between client and server
         pthread_t thread;
