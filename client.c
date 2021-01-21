@@ -10,7 +10,7 @@
 #define MAX 80
 #define SA struct sockaddr
 
-char *version = "0.1";
+char *version = "0.2";
 
 void func(int sockfd)
 {
@@ -83,20 +83,20 @@ int main(int argc, char **argv, char* env[])
     for(int i = 0; i < argc; i++){
         if (strncmp(argv[i], "PUSH", 4) == 0){
             strcpy(buff, "PUSH ");
-            if (i+1 > argc) printf("Wrong request! Use -h to see available requests");
+            if (i+1 > argc) printf("Wrong request! Use -h to see available requests \n");
             strcpy(buff+5, argv[i+1]);
             break;
         }
-        if (strncmp(argv[i], "POP", 4) == 0){
+        if (strncmp(argv[i], "POP", 3) == 0){
             strcpy(buff, "POP");
             break;
         }
     }
     if (buff[0] != 'P'){
-        printf("Wrong request! Use -h to see available requests");
+        printf("Wrong request! Use -h to see available requests \n");
     }
 
-    // socket create and varification
+    // socket create and verification
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd == -1) {
         printf("socket creation failed...\n");
@@ -124,6 +124,7 @@ int main(int argc, char **argv, char* env[])
 
     read(sockfd, buff, sizeof(buff));
     printf("From Server: %s \n", buff);
+
     double wait = difftime(time(NULL), start_time);
     printf("Delay: %f \n", wait);
 

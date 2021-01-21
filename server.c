@@ -388,6 +388,7 @@ void* func(void* arg_ptr)
     if (req == 0){
         bzero(buff, MAX);
         strcpy(buff, "Error: wrong request");
+        fail++;
     }
 
     sleep(wait_time);
