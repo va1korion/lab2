@@ -204,7 +204,7 @@ int main(int argc, char **argv, char* env[])
     servaddr.sin_family = AF_INET;
     servaddr.sin_addr.s_addr = addr;
     servaddr.sin_port = htons(serv_port);
-    printf("Address:%s ", inet_ntoa(servaddr.sin_addr));
+    printf("Address:%s \n", inet_ntoa(servaddr.sin_addr));
     // Binding newly created socket to given IP and verification
     error = bind(sockfd, (SA*)&servaddr, sizeof(servaddr));
     if (error != 0) {
