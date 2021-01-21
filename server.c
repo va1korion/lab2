@@ -13,6 +13,7 @@
 #include <limits.h>
 #include <sys/stat.h>
 #include <signal.h>
+#include <errno.h>
 
 #define MAX 80
 #define SA struct sockaddr
@@ -192,7 +193,7 @@ int main(int argc, char **argv, char* env[])
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd == -1) {
         fprintf(logfile, "socket creation failed...\n");
-        printf("socket bind failed...\n");
+        printf("socket creation failed...\n");
         exit(0);
     }
     else
@@ -201,13 +202,36 @@ int main(int argc, char **argv, char* env[])
     fflush(logfile);
     // assign IP, PORT
     servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = htonl(addr);
+    servaddr.sin_addr.s_addr = addr;
     servaddr.sin_port = htons(serv_port);
-
+    printf("Address:%s ", inet_ntoa(servaddr.sin_addr));
     // Binding newly created socket to given IP and verification
-    if ((bind(sockfd, (SA*)&servaddr, sizeof(servaddr))) != 0) {
+    error = bind(sockfd, (SA*)&servaddr, sizeof(servaddr));
+    if (error != 0) {
         fprintf(logfile, "socket bind failed...\n");
         printf("socket bind failed...\n");
+        switch (error){
+            case EACCES:
+                printf("Error: protected address, try sudo \n");
+                break;
+            case EADDRINUSE:
+                printf("Error: address already in use \n");
+                break;
+            case EBADF:
+                printf("Error: bad socket \n");
+                break;
+
+            case EINVAL:
+                printf("Error: socket already bound \n");
+                break;
+
+            case ENOTSOCK:
+                printf("Error: this is not a socket \n");
+                break;
+
+            default:
+                printf("Unknown error \n");
+        }
         printf("Critical error, exiting... \n");
         fflush(logfile);
         exit(2);
